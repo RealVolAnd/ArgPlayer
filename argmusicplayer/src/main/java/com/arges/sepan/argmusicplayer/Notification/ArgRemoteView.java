@@ -25,7 +25,7 @@ public class ArgRemoteView extends RemoteViews {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             setOnClickPendingIntent(btnViewId, PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_CANCEL_CURRENT));
         } else {
-            setOnClickPendingIntent(btnViewId, PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_CANCEL_CURRENT));
+            setOnClickPendingIntent(btnViewId, PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE));
         }
     }
 
@@ -34,7 +34,7 @@ public class ArgRemoteView extends RemoteViews {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 setOnClickPendingIntent(btnViewId, PendingIntent.getActivity(context, requestCode, homeIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_CANCEL_CURRENT));
             } else {
-                setOnClickPendingIntent(btnViewId, PendingIntent.getActivity(context, requestCode, homeIntent, PendingIntent.FLAG_CANCEL_CURRENT));
+                setOnClickPendingIntent(btnViewId, PendingIntent.getActivity(context, requestCode, homeIntent, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE));
             }
         }
     }

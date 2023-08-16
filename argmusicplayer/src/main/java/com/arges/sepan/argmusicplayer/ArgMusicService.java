@@ -9,10 +9,18 @@ import static com.arges.sepan.argmusicplayer.Enums.AudioState.PLAYING;
 import static com.arges.sepan.argmusicplayer.Enums.AudioState.STOPPED;
 import static com.arges.sepan.argmusicplayer.Enums.AudioType.URL;
 
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.AssetFileDescriptor;
+import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
@@ -23,8 +31,15 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
+import androidx.media.session.MediaButtonReceiver;
 
 import com.arges.sepan.argmusicplayer.Callbacks.OnCompletedListener;
 import com.arges.sepan.argmusicplayer.Callbacks.OnEmbeddedImageReadyListener;
@@ -48,9 +63,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener, MediaPlayer.OnCompletionListener,
+public class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener, MediaPlayer.OnCompletionListener,
         MediaPlayer.OnBufferingUpdateListener, MediaPlayer.OnErrorListener {
     private final Context context;
+
+    private final int NOTIFICATION_ID = 404;
+    private final String NOTIFICATION_DEFAULT_CHANNEL_ID = "default_channel";
     private final AudioManager audioManager;
     private final IBinder binder = new ArgMusicServiceBinder();
     protected AudioState audioState = NO_ACTION;
@@ -82,7 +100,10 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
     private OnEmbeddedImageReadyListener onEmbeddedImageReadyListener;
     private int playAudioPercent = 50;
     private boolean audioFocusHasRequested = false;
-    private final AudioManager.OnAudioFocusChangeListener onAudioFocusListener = new AudioManager.OnAudioFocusChangeListener() {
+    private Activity currentActivity;
+    MediaSessionCompat.Token currentMediaToken;
+
+    private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener = new AudioManager.OnAudioFocusChangeListener() {
         @Override
         public void onAudioFocusChange(int focusChange) {
             switch (focusChange) {
@@ -93,6 +114,7 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
                     //long timeDiffSinceLastPause = System.currentTimeMillis() - timeWhenPaused;
                     //if audio has been paused 10 or more minutes ago, do not resume
                     if (wasPlayingBeforeFocusLoss/* && timeDiffSinceLastPause < 10*60*1000*/)
+
                         continuePlaying();
                     break;
 
@@ -114,14 +136,203 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
         }
     };
 
-    public ArgMusicService(Context context) {
-        this.context = context;
+    private final MediaMetadataCompat.Builder metadataBuilder = new MediaMetadataCompat.Builder();
+
+    private final PlaybackStateCompat.Builder stateBuilder = new PlaybackStateCompat.Builder().setActions(
+            PlaybackStateCompat.ACTION_PLAY
+                    | PlaybackStateCompat.ACTION_STOP
+                    | PlaybackStateCompat.ACTION_PAUSE
+                    | PlaybackStateCompat.ACTION_PLAY_PAUSE
+                    | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+                    | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+    );
+
+    private MediaSessionCompat mediaSession;
+    private boolean audioFocusRequested = false;
+    private AudioFocusRequest audioFocusRequest;
+
+    private final MusicRepository musicRepository = new MusicRepository();
+
+    private MediaSessionCompat.Callback mediaSessionCallback = new MediaSessionCompat.Callback() {
+
+        private Uri currentUri;
+        int currentState = PlaybackStateCompat.STATE_STOPPED;
+
+        @Override
+        public void onPlay() {
+            if (!mediaPlayer.isPlaying()) {
+               //startService(new Intent(getApplicationContext(), PlayerService.class));
+
+                MusicRepository.Track track = musicRepository.getCurrent();
+                updateMetadataFromTrack(track);
+
+            //    prepareToPlay(track.getUri());
+
+                if (!audioFocusRequested) {
+                    audioFocusRequested = true;
+
+                    int audioFocusResult;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        audioFocusResult = audioManager.requestAudioFocus(audioFocusRequest);
+                    } else {
+                        audioFocusResult = audioManager.requestAudioFocus(audioFocusChangeListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+                    }
+                    if (audioFocusResult != AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+                        return;
+                }
+
+                mediaSession.setActive(true); // Сразу после получения фокуса
+
+             //   registerReceiver(becomingNoisyReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
+
+               // exoPlayer.setPlayWhenReady(true);
+                mediaPlayer.start();
+            }
+
+            mediaSession.setPlaybackState(stateBuilder.setState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1).build());
+            currentState = PlaybackStateCompat.STATE_PLAYING;
+
+            refreshNotificationAndForegroundStatus(currentState);
+        }
+
+        @Override
+        public void onPause() {
+            if (audioState == PLAYING)
+                pause();
+
+            mediaSession.setPlaybackState(stateBuilder.setState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1).build());
+            currentState = PlaybackStateCompat.STATE_PAUSED;
+
+            refreshNotificationAndForegroundStatus(currentState);
+        }
+
+        @Override
+        public void onStop() {
+            if (mediaPlayer.isPlaying()) {
+                if (audioState == PLAYING)
+                    pause();
+               // unregisterReceiver(becomingNoisyReceiver);
+            }
+
+            if (audioFocusRequested) {
+                audioFocusRequested = false;
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    audioManager.abandonAudioFocusRequest(audioFocusRequest);
+                } else {
+                    audioManager.abandonAudioFocus(audioFocusChangeListener);
+                }
+            }
+
+            mediaSession.setActive(false);
+
+            mediaSession.setPlaybackState(stateBuilder.setState(PlaybackStateCompat.STATE_STOPPED, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1).build());
+            currentState = PlaybackStateCompat.STATE_STOPPED;
+
+            refreshNotificationAndForegroundStatus(currentState);
+
+            stopSelf();
+        }
+
+        @Override
+        public void onSkipToNext() {
+            MusicRepository.Track track = musicRepository.getNext();
+            updateMetadataFromTrack(track);
+
+            refreshNotificationAndForegroundStatus(currentState);
+
+          //  prepareToPlay(track.getUri());
+        }
+
+        @Override
+        public void onSkipToPrevious() {
+            MusicRepository.Track track = musicRepository.getPrevious();
+            updateMetadataFromTrack(track);
+
+            refreshNotificationAndForegroundStatus(currentState);
+
+           // prepareToPlay(track.getUri());
+
+        }
+
+        /*
+        private void prepareToPlay(Uri uri) {
+            if (!uri.equals(currentUri)) {
+                currentUri = uri;
+                ExtractorMediaSource mediaSource = new ExtractorMediaSource(uri, dataSourceFactory, extractorsFactory, null, null);
+               mediaPlayer.prepare(mediaSource);
+            }
+        }
+*/
+        private void updateMetadataFromTrack(MusicRepository.Track track) {
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, BitmapFactory.decodeResource(context.getResources(), track.getBitmapResId()));
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.getTitle());
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.getArtist());
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.getArtist());
+            metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, track.getDuration());
+            mediaSession.setMetadata(metadataBuilder.build());
+        }
+    };
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return new PlayerServiceBinder();
+    }
+
+    public class PlayerServiceBinder extends Binder {
+        public MediaSessionCompat.Token getMediaSessionToken() {
+            return mediaSession.getSessionToken();
+        }
+    }
+
+    public ArgMusicService() {
+        this.context = App.getAppContext();
         audioManager = (AudioManager) context.getSystemService(AUDIO_SERVICE);
 
         currentPlaylist.setOnAudioAddedToPlaylistListener((audio, wasRemoved) -> onPlaylistAudioChangedListener.onPlaylistAudioChanged(currentPlaylist, currentPlaylist.getCurrentIndex()));
     }
 
     // region <setters-getters>
+    protected void setMediaSession() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            @SuppressLint("WrongConstant") NotificationChannel notificationChannel = new NotificationChannel(NOTIFICATION_DEFAULT_CHANNEL_ID, context.getString(R.string.notification_channel_name), NotificationManagerCompat.IMPORTANCE_DEFAULT);
+            NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            notificationManager.createNotificationChannel(notificationChannel);
+
+            AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build();
+            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                    .setAcceptsDelayedFocusGain(false)
+                    .setWillPauseWhenDucked(true)
+                    .setAudioAttributes(audioAttributes)
+                    .build();
+        }
+        mediaSession = new MediaSessionCompat(context, "PlayerService");
+
+        // FLAG_HANDLES_MEDIA_BUTTONS - хотим получать события от аппаратных кнопок
+        // (например, гарнитуры)
+        // FLAG_HANDLES_TRANSPORT_CONTROLS - хотим получать события от кнопок
+        // на окне блокировки
+        mediaSession.setFlags(
+                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS
+                        | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
+
+        // Отдаем наши коллбэки
+        mediaSession.setCallback(mediaSessionCallback);
+
+       // Context appContext = getApplicationContext();
+
+        // Укажем activity, которую запустит система, если пользователь
+        // заинтересуется подробностями данной сессии
+
+
+        Intent activityIntent = new Intent(context, currentActivity.getClass());
+        mediaSession.setSessionActivity(
+                PendingIntent.getActivity(context, 0, activityIntent, PendingIntent.FLAG_IMMUTABLE));
+    }
     protected void setOnPreparedListener(OnPreparedListener onPreparedListener) {
         this.onPreparedListener = onPreparedListener;
     }
@@ -243,6 +454,10 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
         }
     }
 
+
+
+
+
     //region  <ServiceOverrides>
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -272,8 +487,13 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
     }
 
     @Override
+    public void onCreate(){
+        int s = 1;
+    }
+    @Override
     public void onDestroy() {
         super.onDestroy();
+        mediaSession.release();
     }
 
     protected boolean preparePlaylistToPlay(@NonNull ArgAudioList playlist) {
@@ -299,6 +519,13 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
         return true;
     }
 
+    protected void setRootActivity(Activity rootActivity) {
+        currentActivity = rootActivity;
+    }
+    protected MediaSessionCompat.Token getCurrentMediaToken() {
+        return mediaSession.getSessionToken();
+    }
+
     protected void playAudio(ArgAudio audio) {
         ArgAudio temp = currentAudio;
         currentAudio = audio;
@@ -309,6 +536,7 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
             if (audio.equals(temp)) return;
             if (isAudioValid(audio.getPath(), audio.getType())) {
                 try {
+
                     killMediaPlayer();
                     mediaPlayer = getLoadedMediaPlayer(context, audio);
                     mediaPlayer.setOnPreparedListener(this);
@@ -322,6 +550,7 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
                         mediaPlayer.prepare();
 
                     mediaPlayerTimeOutCheck();
+                    mediaSessionCallback.onPlay();
                     // Other actions will be performed in onBufferingUpdate and OnPrepared methods
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -361,6 +590,7 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
 
     protected void continuePlaying() {
         if (mediaPlayer != null) {
+
             startMediaPlayer();
             updateTimeThread();
             onPlayingListener.onPlaying();
@@ -433,10 +663,7 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
         }, 30000);
     }
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        return binder;
-    }
+
 
     //region <MediaPlayerOverrides>
     @Override
@@ -590,22 +817,65 @@ class ArgMusicService extends Service implements MediaPlayer.OnPreparedListener,
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             AudioAttributes attributes = new AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build();
             AudioFocusRequest afr = new AudioFocusRequest.Builder(AUDIOFOCUS_GAIN)
-                    .setOnAudioFocusChangeListener(onAudioFocusListener)
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener)
                     .setAudioAttributes(attributes)
                     .build();
             audioFocusHasRequested = audioManager.requestAudioFocus(afr) == AUDIOFOCUS_REQUEST_GRANTED;
         } else
-            audioFocusHasRequested = audioManager.requestAudioFocus(onAudioFocusListener, STREAM_MUSIC, AUDIOFOCUS_GAIN) == AUDIOFOCUS_REQUEST_GRANTED;
+            audioFocusHasRequested = audioManager.requestAudioFocus(audioFocusChangeListener, STREAM_MUSIC, AUDIOFOCUS_GAIN) == AUDIOFOCUS_REQUEST_GRANTED;
     }
 
     private void abandonAudioFocus() {
-        audioFocusHasRequested = audioManager.abandonAudioFocus(onAudioFocusListener) != AUDIOFOCUS_REQUEST_GRANTED;
+        audioFocusHasRequested = audioManager.abandonAudioFocus(audioFocusChangeListener) != AUDIOFOCUS_REQUEST_GRANTED;
     }
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         ArgNotification.close(context);
         super.onTaskRemoved(rootIntent);
+    }
+
+    private void refreshNotificationAndForegroundStatus(int playbackState) {
+        switch (playbackState) {
+            case PlaybackStateCompat.STATE_PLAYING: {
+               this.startForeground(NOTIFICATION_ID, getNotification(playbackState));
+                break;
+            }
+            case PlaybackStateCompat.STATE_PAUSED: {
+                NotificationManagerCompat.from(ArgMusicService.this).notify(NOTIFICATION_ID, getNotification(playbackState));
+                stopForeground(false);
+                break;
+            }
+            default: {
+                stopForeground(true);
+                break;
+            }
+        }
+    }
+
+    private Notification getNotification(int playbackState) {
+        NotificationCompat.Builder builder = MediaStyleHelper.from(context, mediaSession);
+        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_previous, context.getString(R.string.previous), MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)));
+
+        if (playbackState == PlaybackStateCompat.STATE_PLAYING)
+            builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_pause, context.getString(R.string.pause), MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_PLAY_PAUSE)));
+        else
+            builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_play, context.getString(R.string.play), MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_PLAY_PAUSE)));
+
+        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_next, context.getString(R.string.next), MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_SKIP_TO_NEXT)));
+        builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                .setShowActionsInCompactView(1)
+                .setShowCancelButton(true)
+                .setCancelButtonIntent(MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_STOP))
+                .setMediaSession(mediaSession.getSessionToken())); // setMediaSession требуется для Android Wear
+        builder.setSmallIcon(R.drawable.ic_launcher);
+        builder.setColor(ContextCompat.getColor(context, R.color.colorPrimaryDark)); // The whole background (in MediaStyle), not just icon background
+        builder.setShowWhen(false);
+        builder.setPriority(NotificationCompat.PRIORITY_HIGH);
+        builder.setOnlyAlertOnce(true);
+        builder.setChannelId(NOTIFICATION_DEFAULT_CHANNEL_ID);
+
+        return builder.build();
     }
 
     public class ArgMusicServiceBinder extends Binder {

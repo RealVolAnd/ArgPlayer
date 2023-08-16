@@ -2,6 +2,7 @@ package com.arges.sepan.argmusicplayer;
 
 import android.app.Activity;
 import android.content.Context;
+import android.support.v4.media.session.MediaSessionCompat;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.RelativeLayout;
@@ -34,6 +35,7 @@ public abstract class ArgPlayerViewRoot extends RelativeLayout implements View.O
     private ArgProgressView progress;
     private ArgErrorView errorView;
     protected ArgMusicPlayer player;
+
 
     protected abstract void setEmbeddedImageBitmap(byte[] byteArray);
 
@@ -243,6 +245,10 @@ public abstract class ArgPlayerViewRoot extends RelativeLayout implements View.O
 
         player.service.nextPrevButtons = false;
         changeNextPrevButtons();
+    }
+
+    public MediaSessionCompat.Token getCurrentMediaToken() {
+        return player.getMediaToken();
     }
 
     public void enableNextPrevButtons() {

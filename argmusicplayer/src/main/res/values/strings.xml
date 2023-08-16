@@ -12,4 +12,13 @@
     <string name="placeholder_current_song_slash_song_count">2 / 161</string>
     <string name="placeholder_song_title_multiline">Andreo Bocelli\nCaruso</string>
     <string name="wait_page_is_loading">Wait page is loading</string>
+
+    <string name="notification_channel_name">Player controls</string>
+
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="stop">Stop</string>
+
+    <string name="previous">Previous</string>
+    <string name="next">Next</string>
 </resources>

@@ -1,9 +1,19 @@
 package com.arges.sepan.argmusicplayer;
 
+import static android.content.Context.BIND_AUTO_CREATE;
 import static com.arges.sepan.argmusicplayer.Enums.AudioState.PAUSED;
 import static com.arges.sepan.argmusicplayer.Enums.AudioState.PLAYING;
 
+import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.os.IBinder;
+import android.os.RemoteException;
+import android.support.v4.media.session.MediaControllerCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -35,6 +45,7 @@ public abstract class ArgMusicPlayer {
     private OnPlayingListener onPlayingListener;
     private OnPlaylistAudioChangedListener onPlaylistAudioChangedListener;
     public static ArgMusicPlayer instance;
+    protected MediaSessionCompat.Token currentToken;
 
     //region Abstract Methods
     protected abstract void changeAudioName(ArgAudio audio);
@@ -75,11 +86,12 @@ public abstract class ArgMusicPlayer {
     }
 
     ArgMusicPlayer(Context context) {
-        this.service = new ArgMusicService(context);
+        this.service = new ArgMusicService();
+
+
         service.setOnPreparedListener((audio, duration) -> {
             setSeekBarMax(duration);
             hideErrorView();
-
             setTimeTotalText(new SimpleDateFormat("mm:ss", Locale.getDefault()).format(duration));
             if (isNotificationEnabled()) {
                 boolean hasNext = service.getCurrentPlaylist().hasNext();
@@ -144,6 +156,10 @@ public abstract class ArgMusicPlayer {
 
     protected void enableNotification(@NonNull ArgNotificationOptions options) {
         notification = new ArgNotification(options.getActivity(), options);
+
+        service.setRootActivity(options.getActivity());
+        service.setMediaSession();
+        currentToken = service.getCurrentMediaToken();
     }
     protected void disableNotification() {//TODO clear notification service and set to null
         if(notification != null)
@@ -208,6 +224,10 @@ public abstract class ArgMusicPlayer {
 
     protected boolean getPlaylistRepeat() {
         return service.getRepeatPlaylist();
+    }
+
+    protected MediaSessionCompat.Token getMediaToken() {
+        return currentToken;
     }
 
     protected void loadSingleAudio(@NonNull ArgAudio audio) {

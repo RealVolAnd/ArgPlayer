@@ -10,7 +10,7 @@ android {
         minSdkVersion 21
         targetSdkVersion 31
 
-        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+       // testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
 
     }
     buildTypes {
@@ -24,9 +24,9 @@ android {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
   //  implementation project(path: ':app')
-    androidTestImplementation('androidx.test.espresso:espresso-core:3.4.0', {
-        exclude group: 'com.android.support', module: 'support-annotations'
-    })
+ //   androidTestImplementation('androidx.test.espresso:espresso-core:3.4.0', {
+  //      exclude group: 'com.android.support', module: 'support-annotations'
+   // })
     //implementation 'com.android.support:appcompat-v7:25.4.0'
     implementation 'androidx.media:media:1.6.0'
     implementation 'com.google.android.material:material:1.4.0'

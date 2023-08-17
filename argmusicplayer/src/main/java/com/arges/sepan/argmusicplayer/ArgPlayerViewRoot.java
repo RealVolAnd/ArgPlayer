@@ -213,6 +213,7 @@ public abstract class ArgPlayerViewRoot extends RelativeLayout implements View.O
         if (fromUser) player.seekTo(progress);
     }
 
+
     // UI methods
     public void enableNotification(@NonNull ArgNotificationOptions options) {
         player.enableNotification(options);
@@ -223,7 +224,9 @@ public abstract class ArgPlayerViewRoot extends RelativeLayout implements View.O
     public void disableNotification() {
         player.disableNotification();
     }
-
+    public void destroy() {
+        player.service.destroy();
+    }
 
     public void disableProgress() {
         player.service.progressCancellation = true;

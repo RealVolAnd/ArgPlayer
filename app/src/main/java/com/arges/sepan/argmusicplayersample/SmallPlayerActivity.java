@@ -126,4 +126,10 @@ public class SmallPlayerActivity extends AppCompatActivity {
             tvMusicType.setText(String.format("PLAYLIST - %s", musicPlayer.getCurrentAudio().getTitle()));
         });
     }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        musicPlayer.destroy();
+    }
 }

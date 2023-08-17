@@ -168,8 +168,8 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
             if (!mediaPlayer.isPlaying()) {
                //startService(new Intent(getApplicationContext(), PlayerService.class));
 
-                MusicRepository.Track track = musicRepository.getCurrent();
-                updateMetadataFromTrack(track);
+              //  MusicRepository.Track track = musicRepository.getCurrent();
+                updateMetadataFromTrack(currentAudio);
 
             //    prepareToPlay(track.getUri());
 
@@ -242,7 +242,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
         @Override
         public void onSkipToNext() {
             MusicRepository.Track track = musicRepository.getNext();
-            updateMetadataFromTrack(track);
+            updateMetadataFromTrack(currentAudio);
 
             refreshNotificationAndForegroundStatus(currentState);
 
@@ -252,7 +252,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
         @Override
         public void onSkipToPrevious() {
             MusicRepository.Track track = musicRepository.getPrevious();
-            updateMetadataFromTrack(track);
+            updateMetadataFromTrack(currentAudio);
 
             refreshNotificationAndForegroundStatus(currentState);
 
@@ -269,11 +269,11 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
             }
         }
 */
-        private void updateMetadataFromTrack(MusicRepository.Track track) {
-            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, BitmapFactory.decodeResource(context.getResources(), track.getBitmapResId()));
+        private void updateMetadataFromTrack(ArgAudio track) {
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, BitmapFactory.decodeResource(context.getResources(), track.getBkg()));
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.getTitle());
-            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.getArtist());
-            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.getArtist());
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "");
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.getSinger());
             metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, track.getDuration());
             mediaSession.setMetadata(metadataBuilder.build());
         }
@@ -552,6 +552,13 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
     @Override
     public void onDestroy() {
         super.onDestroy();
+        mediaSession.release();
+    }
+
+
+
+    public void destroy(){
+        mediaSessionCallback.onStop();
         mediaSession.release();
     }
 

@@ -3,18 +3,35 @@ package com.arges.sepan.argmusicplayer.Models;
 import androidx.annotation.RawRes;
 
 import com.arges.sepan.argmusicplayer.Enums.AudioType;
+import com.arges.sepan.argmusicplayer.R;
+
+import java.util.concurrent.ThreadLocalRandom;
 
 public class ArgAudio {
     private String singer, audioName, path;
+    private int bitmapResId;
+    private long duration;
     private boolean isPlaylist = false;
     private AudioType type;
     private int id = -1;
+
+    int[] bkgIds = {
+            R.drawable.image266680,
+            R.drawable.image396168,
+            R.drawable.image533998,
+            R.drawable.image544064,
+            R.drawable.image208815
+    };
+
+  //  int randomNum = ThreadLocalRandom.current().nextInt(0, 4 + 1);
 
     public ArgAudio(String singer, String audioName, String path, AudioType type) {
         this.singer = singer;
         this.audioName = audioName;
         this.path = path;
         this.type = type;
+        this.bitmapResId = getRndBkg();
+        this.duration = (3 * 60 + 41) * 1000;
     }
 
     public ArgAudio(int id, String singer, String audioName, String path, AudioType type) {
@@ -23,6 +40,12 @@ public class ArgAudio {
         this.path = path;
         this.type = type;
         this.id = id;
+        this.bitmapResId = getRndBkg();
+        this.duration = (3 * 60 + 41) * 1000;
+    }
+
+    private int getRndBkg(){
+        return bkgIds[ThreadLocalRandom.current().nextInt(0, 4 + 1)];
     }
 
     public static ArgAudio createFromRaw(String singer, String audioName, @RawRes int rawId) {
@@ -53,8 +76,15 @@ public class ArgAudio {
         return id;
     }
 
+    public int getBkg() {
+        return bitmapResId;
+    }
+    public long getDuration() {
+        return duration;
+    }
+
     public String getTitle() {
-        return singer + " - " + audioName;
+        return audioName;
     }
 
     public void setSinger(String singer) {

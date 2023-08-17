@@ -24,6 +24,12 @@
                 <action android:name="com.arges.intent.CLOSE" />
             </intent-filter>
         </receiver>
+        <receiver android:name="androidx.media.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
         <service android:name=".ArgMusicService"
             android:enabled="true"
             android:exported="true"
@@ -33,6 +39,7 @@
                 <action android:name="com.arges.intent.service.NEXT"/>
                 <action android:name="com.arges.intent.service.PREV"/>
                 <action android:name="com.arges.intent.service.STOP"/>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
     </application>

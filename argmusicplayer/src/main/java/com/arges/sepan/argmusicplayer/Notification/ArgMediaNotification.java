@@ -134,43 +134,9 @@ public class ArgMediaNotification extends Notification {
         return contentView != null;
     }
 
-    private ArgRemoteView initializeContentView(Context context, Intent homeIntent) {
-        ArgRemoteView contentView = new ArgRemoteView(context.getPackageName(), R.layout.notification_layout);
-
-        contentView.setImageViewResource(R.id.iViewNotif, options.getImageResoureId());
-        contentView.setImageResource(R.id.btnPlayPauseNotif, R.drawable.arg_pause);
-
-        contentView.setButtonClickIntent(context, homeIntent, R.id.iViewNotif, 1);
-        contentView.setButtonClickIntent(context, "PLAYPAUSE", R.id.btnPlayPauseNotif, 2);
-        contentView.setButtonClickIntent(context, "NEXT", R.id.btnNextNotif, 4);
-        contentView.setButtonClickIntent(context, "CLOSE", R.id.btnCloseNotif, 7);
 
 
-        if (options.isProgressEnabled()) {
-            contentView.setText(R.id.tvTimeNowNotif, "00:00");
-        } else {
-            contentView.setVisibility(R.id.relLayProgressNotif, false);
-        }
-        return contentView;
-    }
 
-    private ArgRemoteView initializeBigContentView(Context context, Intent homeIntent) {
-        if (!options.isProgressEnabled())
-            return null;
-
-        ArgRemoteView bigContentView = new ArgRemoteView(context.getPackageName(), R.layout.notification_big_layout);
-
-        bigContentView.setImageViewResource(R.id.iViewBigNotif, options.getImageResoureId());
-        bigContentView.setImageResource(R.id.btnPlayPauseBigNotif, R.drawable.arg_pause);
-
-        bigContentView.setButtonClickIntent(context, homeIntent, R.id.iViewBigNotif, 9);
-        bigContentView.setButtonClickIntent(context, "PREV", R.id.btnPrevBigNotif, 3);
-        bigContentView.setButtonClickIntent(context, "PLAYPAUSE", R.id.btnPlayPauseBigNotif, 5);
-        bigContentView.setButtonClickIntent(context, "NEXT", R.id.btnNextBigNotif, 6);
-        bigContentView.setButtonClickIntent(context, "CLOSE", R.id.btnCloseBigNotif, 8);
-
-        return bigContentView;
-    }
 
     public void renew(String name, int duration, boolean hasNext, boolean hasPrev) {
         /*

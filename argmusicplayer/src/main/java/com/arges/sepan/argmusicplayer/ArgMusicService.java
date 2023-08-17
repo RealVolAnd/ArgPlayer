@@ -31,7 +31,9 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.RemoteException;
 import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaControllerCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 
@@ -56,6 +58,7 @@ import com.arges.sepan.argmusicplayer.Enums.ErrorType;
 import com.arges.sepan.argmusicplayer.Models.ArgAudio;
 import com.arges.sepan.argmusicplayer.Models.ArgAudioList;
 import com.arges.sepan.argmusicplayer.Notification.ArgNotification;
+import com.arges.sepan.argmusicplayer.Notification.ArgNotificationReceiver;
 
 import java.io.File;
 import java.io.IOException;
@@ -101,7 +104,9 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
     private int playAudioPercent = 50;
     private boolean audioFocusHasRequested = false;
     private Activity currentActivity;
-    MediaSessionCompat.Token currentMediaToken;
+    private MediaSessionCompat.Token currentMediaToken;
+    private MediaControllerCompat mediaController;
+    private MediaControllerCompat.Callback callback;
 
     private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener = new AudioManager.OnAudioFocusChangeListener() {
         @Override
@@ -332,6 +337,46 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
         Intent activityIntent = new Intent(context, currentActivity.getClass());
         mediaSession.setSessionActivity(
                 PendingIntent.getActivity(context, 0, activityIntent, PendingIntent.FLAG_IMMUTABLE));
+
+        Intent mediaButtonIntent = new Intent(Intent.ACTION_MEDIA_BUTTON, null, context, MediaButtonReceiver.class);
+        mediaSession.setMediaButtonReceiver(PendingIntent.getBroadcast(context, 0, mediaButtonIntent, PendingIntent.FLAG_IMMUTABLE));
+
+      //  setButtonsCallback();
+
+       // setMediaButtonsReceiver();
+    }
+
+    private void setButtonsCallback(){
+        callback = new MediaControllerCompat.Callback() {
+            @Override
+            public void onPlaybackStateChanged(PlaybackStateCompat state) {
+                if (state == null)
+                    return;
+                switch (state.getState()){
+                    case PlaybackStateCompat.STATE_PLAYING:
+                        break;
+                    case PlaybackStateCompat.STATE_PAUSED:
+                        break;
+                    case PlaybackStateCompat.STATE_STOPPED:
+
+                }
+                boolean playing = state.getState() == PlaybackStateCompat.STATE_PLAYING;
+              //  playButton.setEnabled(!playing);
+              //  pauseButton.setEnabled(playing);
+               // stopButton.setEnabled(playing);
+            }
+        };
+    }
+
+    private void setMediaButtonsReceiver(){
+        try {
+            mediaController = new MediaControllerCompat(context, currentMediaToken);
+            mediaController.registerCallback(callback);
+            callback.onPlaybackStateChanged(mediaController.getPlaybackState());
+        }
+        catch (Exception e) {
+            mediaController = null;
+        }
     }
     protected void setOnPreparedListener(OnPreparedListener onPreparedListener) {
         this.onPreparedListener = onPreparedListener;
@@ -423,6 +468,18 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
 
     public void setAudioState(AudioState audioState) {
         this.audioState = audioState;
+
+        switch(this.audioState){
+            case PLAYING:
+                break;
+            case PAUSED:
+                break;
+            case STOPPED:
+                break;
+            default:
+                break;
+        }
+
     }
 
     protected boolean isPlaylist() {
@@ -461,6 +518,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
     //region  <ServiceOverrides>
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+      //  MediaButtonReceiver.handleIntent(mediaSession, intent);
         String action = intent.getAction();
         if (action != null)
             switch (action) {
@@ -488,6 +546,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
 
     @Override
     public void onCreate(){
+
         int s = 1;
     }
     @Override
@@ -550,7 +609,9 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
                         mediaPlayer.prepare();
 
                     mediaPlayerTimeOutCheck();
+
                     mediaSessionCallback.onPlay();
+
                     // Other actions will be performed in onBufferingUpdate and OnPrepared methods
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -566,7 +627,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
             return;
         if (isPlaylist() && !(index < 0 || index >= currentPlaylist.size())) {
             pauseMediaPlayer();
-            //setAudioState(NO_ACTION);
+            setAudioState(NO_ACTION);
             currentPlaylist.goTo(index);
             onPlaylistAudioChangedListener.onPlaylistAudioChanged(currentPlaylist, currentPlaylist.getCurrentIndex());
         } else {
@@ -590,10 +651,10 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
 
     protected void continuePlaying() {
         if (mediaPlayer != null) {
-
             startMediaPlayer();
             updateTimeThread();
             onPlayingListener.onPlaying();
+            mediaSessionCallback.onPlay();
         }
     }
 
@@ -785,6 +846,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
         if (audioFocusHasRequested) {
             mediaPlayer.start();
             setAudioState(PLAYING);
+
         }
     }
 
@@ -792,6 +854,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
         if (audioState == PLAYING) {
             mediaPlayer.pause();
             setAudioState(PAUSED);
+            mediaSessionCallback.onPause();
         }
     }
 
@@ -800,6 +863,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
             mediaPlayer.stop();
             setAudioState(STOPPED);
             abandonAudioFocus();
+            mediaSessionCallback.onStop();
         }
     }
 
@@ -838,14 +902,17 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
     private void refreshNotificationAndForegroundStatus(int playbackState) {
         switch (playbackState) {
             case PlaybackStateCompat.STATE_PLAYING: {
-                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, getNotification(playbackState));
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, getNotification(PlaybackStateCompat.STATE_PLAYING));
               // this.startForeground(NOTIFICATION_ID, getNotification(playbackState));
                 break;
             }
             case PlaybackStateCompat.STATE_PAUSED: {
-                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, getNotification(playbackState));
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, getNotification(PlaybackStateCompat.STATE_PAUSED));
              //   stopForeground(false);
                 break;
+            }
+            case PlaybackStateCompat.STATE_STOPPED: {
+                NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID);
             }
             default: {
              //   stopForeground(true);
@@ -856,18 +923,18 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
 
     private Notification getNotification(int playbackState) {
         NotificationCompat.Builder builder = MediaStyleHelper.from(context, mediaSession);
-        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_previous, context.getString(R.string.previous), MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)));
+        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_previous, context.getString(R.string.previous), getPIntentWithAction("com.arges.intent.PREV",3)));
 
         if (playbackState == PlaybackStateCompat.STATE_PLAYING)
-            builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_pause, context.getString(R.string.pause), MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_PLAY_PAUSE)));
+            builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_pause, context.getString(R.string.pause),getPIntentWithAction("com.arges.intent.PLAYPAUSE",5)));
         else
-            builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_play, context.getString(R.string.play), MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_PLAY_PAUSE)));
+            builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_play, context.getString(R.string.play),getPIntentWithAction("com.arges.intent.PLAYPAUSE",5)));
 
-        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_next, context.getString(R.string.next), MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_SKIP_TO_NEXT)));
+        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_next, context.getString(R.string.next), getPIntentWithAction("com.arges.intent.NEXT",6)));
         builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
                 .setShowActionsInCompactView(1)
                 .setShowCancelButton(true)
-                .setCancelButtonIntent(MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_STOP))
+                .setCancelButtonIntent(getPIntentWithAction("com.arges.intent.CLOSE",8))
                 .setMediaSession(mediaSession.getSessionToken())); // setMediaSession требуется для Android Wear
         builder.setSmallIcon(R.drawable.ic_launcher);
         builder.setColor(ContextCompat.getColor(context, R.color.colorPrimaryDark)); // The whole background (in MediaStyle), not just icon background
@@ -877,6 +944,12 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
         builder.setChannelId(NOTIFICATION_DEFAULT_CHANNEL_ID);
 
         return builder.build();
+    }
+
+    private PendingIntent getPIntentWithAction(String action, int code){
+        Intent tmpIntent = new Intent(context, ArgNotificationReceiver.class);
+        tmpIntent.setAction(action);
+        return PendingIntent.getBroadcast(context, code, tmpIntent, PendingIntent.FLAG_IMMUTABLE);
     }
 
     public class ArgMusicServiceBinder extends Binder {

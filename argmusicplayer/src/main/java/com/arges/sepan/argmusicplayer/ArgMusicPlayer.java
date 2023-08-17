@@ -156,6 +156,7 @@ public abstract class ArgMusicPlayer {
 
     protected void enableNotification(@NonNull ArgNotificationOptions options) {
         notification = new ArgNotification(options.getActivity(), options);
+        notification.setEnabled(false);
 
         service.setRootActivity(options.getActivity());
         service.setMediaSession();

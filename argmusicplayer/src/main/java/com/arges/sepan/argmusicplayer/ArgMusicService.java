@@ -107,6 +107,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
     private MediaSessionCompat.Token currentMediaToken;
     private MediaControllerCompat mediaController;
     private MediaControllerCompat.Callback callback;
+    private int pausedPos = 0;
 
     private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener = new AudioManager.OnAudioFocusChangeListener() {
         @Override
@@ -191,10 +192,11 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
              //   registerReceiver(becomingNoisyReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
 
                // exoPlayer.setPlayWhenReady(true);
-                mediaPlayer.start();
+               // mediaPlayer.start();
+                continuePlaying();
             }
 
-            mediaSession.setPlaybackState(stateBuilder.setState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1).build());
+            mediaSession.setPlaybackState(stateBuilder.setState(PlaybackStateCompat.STATE_PLAYING, getCurrentPosition(), 1).build());
             currentState = PlaybackStateCompat.STATE_PLAYING;
 
             refreshNotificationAndForegroundStatus(currentState);
@@ -205,7 +207,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
             if (audioState == PLAYING)
                 pause();
 
-            mediaSession.setPlaybackState(stateBuilder.setState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1).build());
+            mediaSession.setPlaybackState(stateBuilder.setState(PlaybackStateCompat.STATE_PAUSED, getCurrentPosition(),0,0 ).build());
             currentState = PlaybackStateCompat.STATE_PAUSED;
 
             refreshNotificationAndForegroundStatus(currentState);
@@ -861,6 +863,7 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
         if (audioState == PLAYING) {
             mediaPlayer.pause();
             setAudioState(PAUSED);
+            pausedPos = mediaPlayer.getCurrentPosition();
             mediaSessionCallback.onPause();
         }
     }

@@ -838,16 +838,17 @@ public class ArgMusicService extends Service implements MediaPlayer.OnPreparedLi
     private void refreshNotificationAndForegroundStatus(int playbackState) {
         switch (playbackState) {
             case PlaybackStateCompat.STATE_PLAYING: {
-               this.startForeground(NOTIFICATION_ID, getNotification(playbackState));
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, getNotification(playbackState));
+              // this.startForeground(NOTIFICATION_ID, getNotification(playbackState));
                 break;
             }
             case PlaybackStateCompat.STATE_PAUSED: {
-                NotificationManagerCompat.from(ArgMusicService.this).notify(NOTIFICATION_ID, getNotification(playbackState));
-                stopForeground(false);
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, getNotification(playbackState));
+             //   stopForeground(false);
                 break;
             }
             default: {
-                stopForeground(true);
+             //   stopForeground(true);
                 break;
             }
         }
